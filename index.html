@@ -278,6 +278,34 @@
         <div class="card">
           <div class="card__header">
             <div>
+              <div class="kicker">ChatGPT bridge (easy)</div>
+              <div class="muted">Copy a prompt, use it in mobile ChatGPT, then paste JSON here.</div>
+            </div>
+          </div>
+
+          <div class="row row--wrap">
+            <button class="btn" id="copyAiPromptBtn" type="button">Copy prompt template</button>
+            <button class="btn btn--primary" id="importAiJsonBtn" type="button">Import pasted AI JSON</button>
+          </div>
+
+          <label class="label">
+            <span>Paste ChatGPT JSON response</span>
+            <textarea
+              class="textarea"
+              id="aiJsonInput"
+              rows="7"
+              placeholder='{"entries":[{"type":"food","name":"Turkey sandwich","calories":420,"protein_g":27,"carbs_g":39,"fat_g":17,"fiber_g":4,"meal":"lunch","note":"Estimated from note","timestamp":"2026-02-13T12:30:00"}]}'
+            ></textarea>
+          </label>
+
+          <div class="muted small">
+            Tip: if ChatGPT wraps JSON in ```json fences, keep it as-is. The importer cleans that automatically.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__header">
+            <div>
               <div class="kicker">Install to Home Screen</div>
               <div class="muted">Turns this into an app-like icon. Works best over HTTPS.</div>
             </div>

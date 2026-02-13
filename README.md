@@ -33,6 +33,7 @@ A cozy, privacy-first calorie + exercise tracker that runs as a **mobile web app
 - Export JSON (backup; includes photo logs — can get large)
 - Export CSV (for spreadsheets)
 - Import JSON (restore)
+- ChatGPT bridge: copy prompt template + paste AI JSON entries back into the app
 - Wipe all data
 
 ---
@@ -116,3 +117,24 @@ Edit `<title>` in `index.html` and the top header text.
 - Smarter “AI parse” workflow for photo + notes (send export to an LLM, then import cleaned entries)
 
 Have fun — and keep it gentle.
+
+---
+
+## Mobile ChatGPT workflow (no backend)
+
+This is the fastest setup if you want AI help without running a server:
+
+1. In the app, open **Settings**.
+2. In **ChatGPT bridge (easy)**, tap **Copy prompt template**.
+3. Paste that prompt into ChatGPT on your phone, then paste your rough notes/photos context under it.
+4. Ask ChatGPT to return JSON only.
+5. Copy ChatGPT's JSON response.
+6. Back in the app, paste into **Paste ChatGPT JSON response** and tap **Import pasted AI JSON**.
+
+Accepted entry types:
+- `food`
+- `exercise`
+- `note`
+- `weight`
+
+Tip: If ChatGPT wraps the response in ```json code fences, the importer will clean that automatically.

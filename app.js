@@ -1161,6 +1161,158 @@ async function importJson(file){
   showToast(`Imported ${importedCount} entries.`);
 }
 
+const AI_IMPORT_TYPES = new Set(["food", "exercise", "note", "weight"]);
+
+function stripMarkdownJsonFences(text){
+  const trimmed = String(text || "").trim();
+  if(!trimmed.startsWith("```")) return trimmed;
+  return trimmed
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+}
+
+function setOptionalNumber(target, key, value){
+  if(value === undefined || value === null || value === "") return;
+  target[key] = safeNum(value);
+}
+
+function setOptionalText(target, key, value){
+  const s = String(value ?? "").trim();
+  if(!s) return;
+  target[key] = s;
+}
+
+function parseAiTs(raw){
+  if(raw === undefined || raw === null || raw === ""){
+    return Date.now() + state.timeOffsetMin * 60 * 1000;
+  }
+  if(typeof raw === "number" && Number.isFinite(raw)){
+    // Accept either milliseconds or unix seconds.
+    return raw > 1e12 ? Math.round(raw) : Math.round(raw * 1000);
+  }
+  const parsed = Date.parse(String(raw));
+  if(Number.isFinite(parsed)) return parsed;
+  return Date.now() + state.timeOffsetMin * 60 * 1000;
+}
+
+function normalizeAiType(raw){
+  const explicit = String(raw?.type || "").trim().toLowerCase();
+  if(explicit) return explicit;
+  if(raw?.duration_min !== undefined || raw?.calories_burned !== undefined || raw?.intensity){
+    return "exercise";
+  }
+  if(raw?.value !== undefined && (raw?.unit || raw?.weight_unit)){
+    return "weight";
+  }
+  if(raw?.text || raw?.note){
+    return "note";
+  }
+  return "food";
+}
+
+function normalizeAiEntry(raw){
+  if(!raw || typeof raw !== "object") return null;
+
+  const type = normalizeAiType(raw);
+  if(!AI_IMPORT_TYPES.has(type)) return null;
+
+  const ts = parseAiTs(raw.ts ?? raw.timestamp ?? raw.time);
+  const base = {
+    id: uid(),
+    ts,
+    day: dayStringFromTs(ts),
+    type,
+  };
+
+  if(type === "food"){
+    const entry = {
+      ...base,
+      name: String(raw.name ?? raw.item ?? "Food").trim() || "Food",
+    };
+    setOptionalNumber(entry, "calories", raw.calories ?? raw.kcal);
+    setOptionalNumber(entry, "protein_g", raw.protein_g ?? raw.protein);
+    setOptionalNumber(entry, "carbs_g", raw.carbs_g ?? raw.carbs);
+    setOptionalNumber(entry, "fat_g", raw.fat_g ?? raw.fat);
+    setOptionalNumber(entry, "fiber_g", raw.fiber_g ?? raw.fiber);
+    setOptionalNumber(entry, "water_ml", raw.water_ml ?? raw.water);
+    setOptionalText(entry, "meal", raw.meal);
+    setOptionalText(entry, "note", raw.note);
+    return entry;
+  }
+
+  if(type === "exercise"){
+    const entry = {
+      ...base,
+      name: String(raw.name ?? raw.activity ?? "Exercise").trim() || "Exercise",
+    };
+    setOptionalText(entry, "intensity", raw.intensity);
+    setOptionalNumber(entry, "duration_min", raw.duration_min ?? raw.duration);
+    setOptionalNumber(entry, "calories_burned", raw.calories_burned ?? raw.kcal_burned);
+    setOptionalText(entry, "note", raw.note);
+    return entry;
+  }
+
+  if(type === "weight"){
+    if(raw.value === undefined || raw.value === null || raw.value === "") return null;
+    const entry = {
+      ...base,
+      value: safeNum(raw.value),
+      unit: String(raw.unit ?? raw.weight_unit ?? state.goals.weightUnit ?? "lb"),
+    };
+    setOptionalText(entry, "note", raw.note);
+    return entry;
+  }
+
+  const text = String(raw.text ?? raw.note ?? raw.caption ?? "").trim();
+  if(!text) return null;
+  return {
+    ...base,
+    text,
+  };
+}
+
+function parseAiImport(text){
+  const cleaned = stripMarkdownJsonFences(text);
+  const payload = JSON.parse(cleaned);
+  const rawEntries = Array.isArray(payload) ? payload : payload?.entries;
+  if(!Array.isArray(rawEntries)){
+    throw new Error("AI JSON must be an array or an object with an entries array.");
+  }
+  const normalized = rawEntries.map(normalizeAiEntry).filter(Boolean);
+  if(!normalized.length){
+    throw new Error("No usable entries found.");
+  }
+  return normalized;
+}
+
+function aiPromptTemplate(){
+  const day = todayDay();
+  return [
+    "Convert my rough health-tracker notes into strict JSON for Pocket Balance.",
+    "",
+    "Return only valid JSON. No markdown, no extra explanation.",
+    "",
+    "Use this format:",
+    "{",
+    '  "entries": [',
+    '    { "type": "food", "name": "string", "calories": 0, "protein_g": 0, "carbs_g": 0, "fat_g": 0, "fiber_g": 0, "water_ml": 0, "meal": "breakfast|lunch|dinner|snack", "note": "optional", "timestamp": "ISO-8601" },',
+    '    { "type": "exercise", "name": "string", "intensity": "light|moderate|vigorous", "duration_min": 0, "calories_burned": 0, "note": "optional", "timestamp": "ISO-8601" },',
+    '    { "type": "note", "text": "string", "timestamp": "ISO-8601" },',
+    '    { "type": "weight", "value": 0, "unit": "lb|kg", "note": "optional", "timestamp": "ISO-8601" }',
+    "  ]",
+    "}",
+    "",
+    "Rules:",
+    "- Include only events clearly stated in my text.",
+    "- If a numeric value is unknown, omit that field.",
+    `- If date is missing, use ${day}.`,
+    "- Keep assumptions short inside note.",
+    "",
+    "Text to parse:",
+  ].join("\n");
+}
+
 /** -----------------------------
  *  Copy update
  *  ----------------------------- */
@@ -1380,6 +1532,39 @@ function setupSettings(){
 
   $("#exportJsonBtn").addEventListener("click", exportJson);
   $("#exportCsvBtn").addEventListener("click", exportCsv);
+
+  $("#copyAiPromptBtn")?.addEventListener("click", async () => {
+    const ok = await copyToClipboard(aiPromptTemplate());
+    showToast(ok ? "Prompt copied." : "Could not copy prompt.");
+  });
+
+  $("#importAiJsonBtn")?.addEventListener("click", async () => {
+    const input = $("#aiJsonInput");
+    const raw = input?.value?.trim() || "";
+    if(!raw){
+      showToast("Paste AI JSON first.");
+      return;
+    }
+
+    let entries = [];
+    try{
+      entries = parseAiImport(raw);
+    }catch(e){
+      alert(`Could not parse AI JSON.\n\n${e.message}`);
+      return;
+    }
+
+    const ok = confirm(`Import ${entries.length} AI-generated entr${entries.length === 1 ? "y" : "ies"}?`);
+    if(!ok) return;
+
+    for(const e of entries){
+      await addEntry(e);
+    }
+
+    input.value = "";
+    await refreshAll();
+    showToast(`Imported ${entries.length} entr${entries.length === 1 ? "y" : "ies"}.`);
+  });
 
   $("#importJsonInput").addEventListener("change", async (evt) => {
     const file = evt.target.files?.[0];
