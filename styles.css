@@ -293,6 +293,40 @@ body{
 }
 .item.is-open .item__details{ display: block; }
 
+.checklist{
+  display: grid;
+  gap: 8px;
+}
+
+.checkrow{
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(30,33,44,0.10);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.75);
+}
+
+.checkrow input[type="checkbox"]{
+  width: 18px;
+  height: 18px;
+}
+
+.checkrow__label{
+  font-weight: 600;
+}
+
+.checkrow__label.is-done{
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.mini-form .input{
+  flex: 1;
+}
+
 .qa-grid{
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

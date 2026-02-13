@@ -57,6 +57,11 @@ const DEFAULT_QUICK_ACTIONS = [
   { id:"cam", emoji:"📸", label:"Photo\nLog", type:"open", payload:{ targetType:"photo" }, theme:1 },
 ];
 
+const DEFAULT_PILL_CATALOG = [
+  "Morning pill",
+  "Evening pill"
+];
+
 const PRAISE = {
   food: [
     "Logged. Small check-ins add up.",
@@ -97,6 +102,9 @@ const state = {
   timeOffsetMin: 0,
   goals: { ...DEFAULT_GOALS },
   quickActions: [...DEFAULT_QUICK_ACTIONS],
+  pillCatalog: [...DEFAULT_PILL_CATALOG],
+  pillTakenByDay: {},
+  todoItems: [],
 };
 
 /** -----------------------------
@@ -114,7 +122,9 @@ function htmlEscape(s){
   return String(s || "")
     .replaceAll("&","&amp;")
     .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;");
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#39;");
 }
 
 function showToast(msg){
@@ -348,6 +358,91 @@ async function renderToday(){
   // Recent list (across all days)
   const rec = await getRecentEntries(state.recentLimit);
   renderRecentList(rec);
+
+  renderTrackers(day);
+}
+
+function renderTrackers(day){
+  const pillHost = $("#pillChecklist");
+  const todoHost = $("#todoChecklist");
+  if(!pillHost || !todoHost) return;
+
+  const takenSet = new Set(state.pillTakenByDay[day] || []);
+
+  if(!state.pillCatalog.length){
+    pillHost.innerHTML = `<div class="muted small">No pills added yet.</div>`;
+  }else{
+    pillHost.innerHTML = state.pillCatalog.map((pill) => {
+      const checked = takenSet.has(pill) ? "checked" : "";
+      const doneClass = checked ? "is-done" : "";
+      return `
+        <label class="checkrow">
+          <input type="checkbox" data-pill="${htmlEscape(pill)}" ${checked} />
+          <span class="checkrow__label ${doneClass}">${htmlEscape(pill)}</span>
+          <button class="btn item__btn btn--ghost" type="button" data-delete-pill="${htmlEscape(pill)}">Remove</button>
+        </label>
+      `;
+    }).join("");
+  }
+
+  if(!state.todoItems.length){
+    todoHost.innerHTML = `<div class="muted small">No to-dos yet.</div>`;
+  }else{
+    todoHost.innerHTML = state.todoItems.map((todo) => {
+      const checked = todo.done ? "checked" : "";
+      const doneClass = todo.done ? "is-done" : "";
+      return `
+        <label class="checkrow">
+          <input type="checkbox" data-todo-id="${todo.id}" ${checked} />
+          <span class="checkrow__label ${doneClass}">${htmlEscape(todo.text)}</span>
+          <button class="btn item__btn btn--ghost" type="button" data-delete-todo="${todo.id}">Remove</button>
+        </label>
+      `;
+    }).join("");
+  }
+
+  pillHost.querySelectorAll("input[data-pill]").forEach((input) => {
+    input.addEventListener("change", async () => {
+      const pill = input.dataset.pill;
+      const next = new Set(state.pillTakenByDay[day] || []);
+      if(input.checked) next.add(pill);
+      else next.delete(pill);
+      state.pillTakenByDay[day] = [...next];
+      await putSetting("pillTakenByDay", state.pillTakenByDay);
+      renderTrackers(day);
+    });
+  });
+
+  pillHost.querySelectorAll("[data-delete-pill]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const pill = btn.dataset.deletePill;
+      state.pillCatalog = state.pillCatalog.filter((x) => x !== pill);
+      for(const k of Object.keys(state.pillTakenByDay)){
+        state.pillTakenByDay[k] = (state.pillTakenByDay[k] || []).filter((x) => x !== pill);
+      }
+      await putSetting("pillCatalog", state.pillCatalog);
+      await putSetting("pillTakenByDay", state.pillTakenByDay);
+      renderTrackers(day);
+    });
+  });
+
+  todoHost.querySelectorAll("input[data-todo-id]").forEach((input) => {
+    input.addEventListener("change", async () => {
+      const id = input.dataset.todoId;
+      state.todoItems = state.todoItems.map((t) => t.id === id ? { ...t, done: input.checked } : t);
+      await putSetting("todoItems", state.todoItems);
+      renderTrackers(day);
+    });
+  });
+
+  todoHost.querySelectorAll("[data-delete-todo]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.deleteTodo;
+      state.todoItems = state.todoItems.filter((t) => t.id !== id);
+      await putSetting("todoItems", state.todoItems);
+      renderTrackers(day);
+    });
+  });
 }
 
 
@@ -861,6 +956,54 @@ async function saveGoalsFromForm(){
   await refreshAll();
 }
 
+
+async function loadTrackers(){
+  const savedCatalog = await getSetting("pillCatalog");
+  state.pillCatalog = Array.isArray(savedCatalog) && savedCatalog.length
+    ? savedCatalog.filter(Boolean)
+    : [...DEFAULT_PILL_CATALOG];
+
+  const savedTaken = await getSetting("pillTakenByDay");
+  state.pillTakenByDay = (savedTaken && typeof savedTaken === "object") ? savedTaken : {};
+
+  const savedTodos = await getSetting("todoItems");
+  state.todoItems = Array.isArray(savedTodos) ? savedTodos : [];
+}
+
+function setupTrackers(){
+  $("#pillForm")?.addEventListener("submit", async (evt) => {
+    evt.preventDefault();
+    const input = $("#pillInput");
+    const name = input.value.trim();
+    if(!name){
+      showToast("Enter a pill name first.");
+      return;
+    }
+    if(state.pillCatalog.includes(name)){
+      showToast("That pill is already listed.");
+      return;
+    }
+    state.pillCatalog.push(name);
+    await putSetting("pillCatalog", state.pillCatalog);
+    input.value = "";
+    renderTrackers(todayDay());
+  });
+
+  $("#todoForm")?.addEventListener("submit", async (evt) => {
+    evt.preventDefault();
+    const input = $("#todoInput");
+    const text = input.value.trim();
+    if(!text){
+      showToast("Enter a task first.");
+      return;
+    }
+    state.todoItems.unshift({ id: uid(), text, done: false });
+    await putSetting("todoItems", state.todoItems);
+    input.value = "";
+    renderTrackers(todayDay());
+  });
+}
+
 /** -----------------------------
  *  Export / Import
  *  ----------------------------- */
@@ -1212,6 +1355,7 @@ function setupSettings(){
     if(!ok) return;
     await wipeAll();
     await loadGoals();
+    await loadTrackers();
     await refreshAll();
     showToast("Cleared.");
   });
@@ -1275,9 +1419,11 @@ async function refreshAll(){
   setupManualForm();
   setupSettings();
   setupInsights();
+  setupTrackers();
   setupOfflinePill();
 
   await registerServiceWorker();
   await loadGoals();
+  await loadTrackers();
   await refreshAll();
 })();
