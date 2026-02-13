@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#fbfbfd" />
+  <meta name="description" content="A cozy, privacy-first calorie + exercise tracker that runs offline as a PWA." />
+  <title>Pocket Balance</title>
+
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="assets/icon-192.png" />
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar__title">
+        <h1 id="appTitle">Pocket Balance</h1>
+        <p class="topbar__subtitle" id="appSubtitle">Tiny logs. Big consistency.</p>
+      </div>
+
+      <div class="topbar__right">
+        <span class="pill pill--soft" id="offlinePill" title="Connection status">Online</span>
+      </div>
+    </header>
+
+    <nav class="tabs" aria-label="Primary navigation">
+      <button class="tab is-active" data-view="today" aria-current="page">Today</button>
+      <button class="tab" data-view="log">Log</button>
+      <button class="tab" data-view="insights">Insights</button>
+      <button class="tab" data-view="settings">Settings</button>
+    </nav>
+
+    <main class="content">
+      <!-- TODAY -->
+      <section class="view is-active" data-view="today">
+        <div class="card">
+          <div class="card__header">
+            <div>
+              <div class="kicker">Today at a glance</div>
+              <div class="muted" id="todayDateLabel"></div>
+            </div>
+            <button class="btn btn--ghost" id="quickAddBtn" title="Jump to quick actions">Quick add</button>
+          </div>
+
+          <div class="statgrid" id="todayStatGrid">
+            <!-- injected -->
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="row">
+            <div class="kicker">Gentle nudge</div>
+            <div class="pill pill--soft" id="nudgePill">All caught up.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__header">
+            <div>
+              <div class="kicker">Recent activity</div>
+              <div class="muted">Tap an item to expand. Swipe is not required.</div>
+            </div>
+            <div class="seg">
+              <button class="seg__btn is-active" data-recent="10">10</button>
+              <button class="seg__btn" data-recent="20">20</button>
+              <button class="seg__btn" data-recent="30">30</button>
+            </div>
+          </div>
+
+          <div class="list" id="recentList">
+            <!-- injected -->
+          </div>
+        </div>
+      </section>
+
+      <!-- LOG -->
+      <section class="view" data-view="log">
+        <div class="card" id="quickActionsCard">
+          <div class="card__header">
+            <div>
+              <div class="kicker">Quick actions</div>
+              <div class="muted">One-tap logging for the things that happen every day.</div>
+            </div>
+            <button class="btn btn--ghost" id="editQuickBtnsBtn" title="Edit quick actions (future)">Edit</button>
+          </div>
+
+          <div class="qa-grid" id="quickActionsGrid">
+            <!-- injected -->
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="row row--wrap">
+            <div class="kicker">Repeat</div>
+            <div class="chips" id="repeatChips">
+              <!-- injected -->
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="row row--wrap">
+            <div class="kicker">Log time</div>
+            <div class="chips" id="timeChips">
+              <button class="chip is-active" data-min="0">Now</button>
+              <button class="chip" data-min="-10">10m ago</button>
+              <button class="chip" data-min="-20">20m ago</button>
+              <button class="chip" data-min="-30">30m ago</button>
+              <button class="chip" data-min="-45">45m ago</button>
+              <button class="chip" data-min="-60">60m ago</button>
+            </div>
+            <div class="muted small" id="timeChipLabel">Logging now</div>
+          </div>
+        </div>
+
+        <div class="card card--dashed">
+          <div class="card__header">
+            <div>
+              <div class="kicker">Plain-language note</div>
+              <div class="muted">Type like you’re texting yourself. Great for “I’ll clean this up later.”</div>
+            </div>
+            <div class="row row--tight">
+              <button class="btn" id="saveNoteBtn">Log</button>
+              <button class="btn btn--ghost" id="clearNoteBtn">Clear</button>
+            </div>
+          </div>
+
+          <textarea class="textarea" id="noteText" rows="3" placeholder="e.g., ‘Lunch: turkey sandwich + chips, felt snacky mid-afternoon’"></textarea>
+          <div class="muted small" id="noteHint">Notes are saved locally on this device.</div>
+        </div>
+
+        <div class="card">
+          <div class="card__header">
+            <div>
+              <div class="kicker">Manual entry</div>
+              <div class="muted">For anything that doesn’t fit a quick button.</div>
+            </div>
+          </div>
+
+          <form id="manualForm" class="form">
+            <label class="label">
+              <span>Type</span>
+              <select id="manualType" class="input">
+                <option value="food">Food / Drink</option>
+                <option value="exercise">Exercise</option>
+                <option value="weight">Body weight</option>
+                <option value="photo">Photo (save for later AI parsing)</option>
+              </select>
+            </label>
+
+            <div id="manualFields"></div>
+
+            <button class="btn btn--primary" type="submit">Save entry</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- INSIGHTS -->
+      <section class="view" data-view="insights">
+        <div class="card">
+          <div class="card__header">
+            <div>
+              <div class="kicker">Week view</div>
+              <div class="muted">A tiny trendline beats a perfect spreadsheet.</div>
+            </div>
+            <button class="btn btn--ghost" id="copyUpdateBtn">Copy update</button>
+          </div>
+
+          <div class="insights-grid" id="insightsGrid">
+            <!-- injected -->
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="muted small">
+            Tips: keep the logs frictionless. Use quick actions for “good enough” tracking, and the note box when life is chaotic.
+          </div>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="view" data-view="settings">
+        <div class="card">
+          <div class="card__header">
+            <div>
+              <div class="kicker">Goals</div>
+              <div class="muted">Gentle defaults. Adjust any time.</div>
+            </div>
+          </div>
+
+          <form id="goalsForm" class="form form--two">
+            <label class="label">
+              <span>Daily calorie target</span>
+              <input id="goalCalories" class="input" inputmode="numeric" placeholder="e.g., 1800" />
+            </label>
+            <label class="label">
+              <span>Protein target (g)</span>
+              <input id="goalProtein" class="input" inputmode="numeric" placeholder="e.g., 110" />
+            </label>
+            <label class="label">
+              <span>Fiber target (g)</span>
+              <input id="goalFiber" class="input" inputmode="numeric" placeholder="e.g., 25" />
+            </label>
+            <label class="label">
+              <span>Water target (ml)</span>
+              <input id="goalWater" class="input" inputmode="numeric" placeholder="e.g., 2000" />
+            </label>
+            <label class="label">
+              <span>Exercise target (min)</span>
+              <input id="goalExercise" class="input" inputmode="numeric" placeholder="e.g., 30" />
+            </label>
+
+            <div class="row row--tight">
+              <button class="btn btn--primary" type="submit">Save goals</button>
+              <button class="btn btn--ghost" type="button" id="resetGoalsBtn">Reset</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card__header">
+            <div>
+              <div class="kicker">Data</div>
+              <div class="muted">Everything stays on-device unless you export it.</div>
+            </div>
+          </div>
+
+          <div class="row row--wrap">
+            <button class="btn" id="exportJsonBtn">Export JSON</button>
+            <button class="btn" id="exportCsvBtn">Export CSV</button>
+            <label class="btn btn--ghost filebtn">
+              Import JSON
+              <input id="importJsonInput" type="file" accept="application/json" />
+            </label>
+            <button class="btn btn--danger" id="wipeBtn">Clear all data</button>
+          </div>
+
+          <div class="muted small">
+            If you want “cloud sync” later, exporting a JSON backup is a good stepping stone.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__header">
+            <div>
+              <div class="kicker">Install to Home Screen</div>
+              <div class="muted">Turns this into an app-like icon. Works best over HTTPS.</div>
+            </div>
+          </div>
+
+          <ol class="steps">
+            <li>Open this page in Safari.</li>
+            <li>Tap the Share icon.</li>
+            <li>Choose “Add to Home Screen”.</li>
+            <li>Launch from the new icon (recommended).</li>
+          </ol>
+
+          <div class="muted small">
+            Offline mode requires a secure origin (HTTPS). For personal use, a free static host (GitHub Pages / Netlify / Cloudflare Pages) is the easiest option.
+          </div>
+        </div>
+
+        <div class="card card--soft">
+          <div class="kicker">Health note</div>
+          <p class="muted small">
+            This tool is for personal awareness and habit support — not medical advice. If calorie tracking feels stressful or obsessive, it’s okay to switch to gentler metrics (protein, fiber, water, steps) or pause entirely.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
