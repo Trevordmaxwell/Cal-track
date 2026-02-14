@@ -111,6 +111,7 @@ const state = {
   pillTakenByDay: {},
   todoItems: [],
   contactsTracker: { ...DEFAULT_CONTACTS_TRACKER },
+  lastAiPromptSourceNoteIds: [],
 };
 
 /** -----------------------------
@@ -1239,6 +1240,7 @@ async function importJson(file){
 }
 
 const AI_IMPORT_TYPES = new Set(["food", "exercise", "note", "weight"]);
+const AI_SOURCE_NOTES_LIMIT = 60;
 
 function stripMarkdownJsonFences(text){
   const trimmed = String(text || "").trim();
@@ -1363,8 +1365,53 @@ function parseAiImport(text){
   return normalized;
 }
 
-function aiPromptTemplate(){
+function isPlainLanguageNoteEntry(e){
+  return e && e.type === "note" && String(e.text ?? "").trim().length > 0;
+}
+
+async function getPlainLanguageNotes(){
+  const entries = await getAllEntries();
+  return entries
+    .filter(isPlainLanguageNoteEntry)
+    .sort((a, b) => safeNum(a.ts) - safeNum(b.ts));
+}
+
+function toAiSourceNotePayload(note){
+  const ts = safeNum(note.ts) || Date.now();
+  return {
+    id: note.id || uid(),
+    timestamp: new Date(ts).toISOString(),
+    day: note.day || dayStringFromTs(ts),
+    text: String(note.text || "").trim(),
+  };
+}
+
+async function refreshAiSourceSummary(){
+  const summary = $("#aiSourceSummary");
+  if(!summary) return;
+
+  const notes = await getPlainLanguageNotes();
+  const total = notes.length;
+  const noteIds = new Set(notes.map((n) => n.id));
+  state.lastAiPromptSourceNoteIds = state.lastAiPromptSourceNoteIds.filter((id) => noteIds.has(id));
+  const copied = state.lastAiPromptSourceNoteIds.length;
+
+  if(!total){
+    summary.textContent = "No plain-language notes saved yet. Add notes in the Log tab.";
+    return;
+  }
+
+  if(copied){
+    summary.textContent = `${total} notes in inbox. Last copied set: ${copied}.`;
+    return;
+  }
+
+  summary.textContent = `${total} notes ready for prompt copy.`;
+}
+
+function aiPromptTemplate(sourceNotes = []){
   const day = todayDay();
+  const sourceJson = JSON.stringify(sourceNotes, null, 2);
   return [
     "Convert my rough health-tracker notes into strict JSON for Pocket Balance.",
     "",
@@ -1381,12 +1428,14 @@ function aiPromptTemplate(){
     "}",
     "",
     "Rules:",
-    "- Include only events clearly stated in my text.",
+    "- Include only events clearly stated in the provided notes JSON.",
     "- If a numeric value is unknown, omit that field.",
     `- If date is missing, use ${day}.`,
     "- Keep assumptions short inside note.",
+    '- If no usable events exist, return {"entries":[]}.',
     "",
-    "Text to parse:",
+    "Local plain-language notes (JSON):",
+    sourceJson,
   ].join("\n");
 }
 
@@ -1611,8 +1660,59 @@ function setupSettings(){
   $("#exportCsvBtn").addEventListener("click", exportCsv);
 
   $("#copyAiPromptBtn")?.addEventListener("click", async () => {
-    const ok = await copyToClipboard(aiPromptTemplate());
-    showToast(ok ? "Prompt copied." : "Could not copy prompt.");
+    try{
+      const allNotes = await getPlainLanguageNotes();
+      const notesForPrompt = allNotes.slice(-AI_SOURCE_NOTES_LIMIT);
+      state.lastAiPromptSourceNoteIds = notesForPrompt.map((n) => n.id).filter(Boolean);
+      const sourcePayload = notesForPrompt.map(toAiSourceNotePayload);
+      const prompt = aiPromptTemplate(sourcePayload);
+      const ok = await copyToClipboard(prompt);
+      await refreshAiSourceSummary();
+      if(ok){
+        if(sourcePayload.length){
+          const truncated = allNotes.length > sourcePayload.length;
+          showToast(truncated
+            ? `Prompt copied with latest ${sourcePayload.length} notes.`
+            : `Prompt copied with ${sourcePayload.length} notes.`);
+        }else{
+          showToast("Prompt copied (no notes found yet).");
+        }
+      }else{
+        showToast("Could not copy prompt.");
+      }
+    }catch(e){
+      alert(`Could not build AI prompt.\n\n${e.message}`);
+    }
+  });
+
+  $("#clearAiSourceNotesBtn")?.addEventListener("click", async () => {
+    const allNotes = await getPlainLanguageNotes();
+    if(!allNotes.length){
+      state.lastAiPromptSourceNoteIds = [];
+      await refreshAiSourceSummary();
+      showToast("No note entries to clear.");
+      return;
+    }
+
+    const copiedIds = new Set(state.lastAiPromptSourceNoteIds);
+    const copiedNotes = allNotes.filter((n) => copiedIds.has(n.id));
+    const targetNotes = copiedNotes.length ? copiedNotes : allNotes;
+    const promptScope = copiedNotes.length
+      ? `last copied notes (${targetNotes.length})`
+      : `all plain-language notes (${targetNotes.length})`;
+
+    const ok = confirm(`Clear ${promptScope}? This only removes note entries, not food/exercise logs.`);
+    if(!ok) return;
+
+    for(const note of targetNotes){
+      await deleteEntry(note.id);
+    }
+
+    state.lastAiPromptSourceNoteIds = [];
+    const noteInput = $("#noteText");
+    if(noteInput) noteInput.value = "";
+    await refreshAll();
+    showToast(`Cleared ${targetNotes.length} notes.`);
   });
 
   $("#importAiJsonBtn")?.addEventListener("click", async () => {
@@ -1661,6 +1761,10 @@ function setupSettings(){
     await refreshAll();
     showToast("Cleared.");
   });
+
+  refreshAiSourceSummary().catch(() => {
+    // keep settings usable even if summary lookup fails
+  });
 }
 
 function setupInsights(){
@@ -1706,6 +1810,7 @@ async function refreshAll(){
   await renderToday();
   await renderRepeatChips();
   await renderInsights();
+  await refreshAiSourceSummary();
 }
 
 /** -----------------------------
