@@ -1042,7 +1042,7 @@ async function exportJson(){
   };
 
   downloadText(`pocket-balance-backup-${todayDay()}.json`, JSON.stringify(payload, null, 2), "application/json");
-  showToast("Exported JSON.");
+  showToast("Exported backup JSON.");
 }
 
 async function exportCsv(){
@@ -1101,12 +1101,17 @@ async function importJson(file){
     return;
   }
 
-  const rawEntries = Array.isArray(data?.entries)
-    ? data.entries
-    : (Array.isArray(data) ? data : null);
+  // Keep this importer strict so backup restore behavior is predictable.
+  // AI-shaped JSON should go through the dedicated ChatGPT bridge importer.
+  const looksLikeBackup = data
+    && typeof data === "object"
+    && !Array.isArray(data)
+    && Array.isArray(data.entries)
+    && data.settings
+    && typeof data.settings === "object";
 
-  if(!rawEntries){
-    alert("That file doesn’t look like a Pocket Balance export.");
+  if(!looksLikeBackup){
+    alert("This import is for Pocket Balance backup JSON files only.\n\nFor AI-generated JSON, use Settings > ChatGPT bridge (easy).");
     return;
   }
 
@@ -1121,44 +1126,17 @@ async function importJson(file){
 
   // restore entries
   let importedCount = 0;
-  for(const e of rawEntries){
+  for(const e of data.entries){
     if(!e || typeof e !== "object") continue;
-
-    const tsRaw = e.ts ?? e.timestamp;
-    const parsedTs = typeof tsRaw === "number"
-      ? tsRaw
-      : (typeof tsRaw === "string" ? (Number(tsRaw) || Date.parse(tsRaw)) : NaN);
-    const ts = Number.isFinite(parsedTs) && parsedTs > 0 ? parsedTs : Date.now();
-
-    let type = typeof e.type === "string" ? e.type.toLowerCase().trim() : "";
-    if(!type){
-      if(e.text || e.note) type = "note";
-      else if(e.value && (e.unit || e.weightUnit)) type = "weight";
-      else if(e.duration_min || e.calories_burned) type = "exercise";
-      else type = "food";
-    }
-
-    if(!["food","exercise","note","weight","photo"].includes(type)){
-      if(e.text || e.note) type = "note";
-      else continue;
-    }
-
-    const normalized = {
-      ...e,
-      id: e.id || uid(),
-      type,
-      ts,
-      day: e.day || dayStringFromTs(ts),
-      text: type === "note" ? String(e.text ?? e.note ?? "") : e.text,
-    };
-
-    await addEntry(normalized);
+    if(!e.id || !e.ts || !e.type) continue;
+    await addEntry(e);
     importedCount += 1;
   }
 
   await loadGoals();
+  await loadTrackers();
   await refreshAll();
-  showToast(`Imported ${importedCount} entries.`);
+  showToast(`Imported backup (${importedCount} entries).`);
 }
 
 const AI_IMPORT_TYPES = new Set(["food", "exercise", "note", "weight"]);
@@ -1569,7 +1547,7 @@ function setupSettings(){
   $("#importJsonInput").addEventListener("change", async (evt) => {
     const file = evt.target.files?.[0];
     if(!file) return;
-    const ok = confirm("Import will replace all existing data on this device. Continue?");
+    const ok = confirm("Import backup will replace all existing data on this device. Continue?");
     if(!ok) return;
     await importJson(file);
     evt.target.value = "";
