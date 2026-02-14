@@ -3,7 +3,7 @@
    - keeps it intentionally small + readable
 */
 
-const CACHE = "pb-cache-v1";
+const CACHE = "pb-cache-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -44,18 +44,17 @@ self.addEventListener("fetch", (event) => {
   event.respondWith((async () => {
     const url = new URL(req.url);
 
-    // same-origin: prefer cache, fall back to network, then offline shell
+    // same-origin: prefer network so updates show up quickly, then fallback to cache
     if(url.origin === self.location.origin){
-      const cached = await caches.match(req);
-      if(cached) return cached;
-
       try{
         const fresh = await fetch(req);
         const cache = await caches.open(CACHE);
-        cache.put(req, fresh.clone());
+        if(fresh && fresh.ok) cache.put(req, fresh.clone());
         return fresh;
       }catch(e){
-        // offline fallback to app shell
+        const cached = await caches.match(req);
+        if(cached) return cached;
+        // offline fallback to app shell for app routes
         return caches.match("./index.html");
       }
     }
