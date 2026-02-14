@@ -261,17 +261,45 @@
           </div>
 
           <div class="row row--wrap">
-            <button class="btn" id="exportJsonBtn">Export JSON</button>
+            <button class="btn" id="exportJsonBtn">Export backup JSON</button>
             <button class="btn" id="exportCsvBtn">Export CSV</button>
             <label class="btn btn--ghost filebtn">
-              Import JSON
+              Import backup JSON
               <input id="importJsonInput" type="file" accept="application/json" />
             </label>
             <button class="btn btn--danger" id="wipeBtn">Clear all data</button>
           </div>
 
           <div class="muted small">
-            If you want “cloud sync” later, exporting a JSON backup is a good stepping stone.
+            Use backup JSON for full restore. Use ChatGPT bridge below for AI-generated entries.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__header">
+            <div>
+              <div class="kicker">ChatGPT bridge (easy)</div>
+              <div class="muted">Copy a prompt, use it in mobile ChatGPT, then paste JSON here.</div>
+            </div>
+          </div>
+
+          <div class="row row--wrap">
+            <button class="btn" id="copyAiPromptBtn" type="button">Copy prompt template</button>
+            <button class="btn btn--primary" id="importAiJsonBtn" type="button">Import pasted AI JSON</button>
+          </div>
+
+          <label class="label">
+            <span>Paste ChatGPT JSON response</span>
+            <textarea
+              class="textarea"
+              id="aiJsonInput"
+              rows="7"
+              placeholder='{"entries":[{"type":"food","name":"Turkey sandwich","calories":420,"protein_g":27,"carbs_g":39,"fat_g":17,"fiber_g":4,"meal":"lunch","note":"Estimated from note","timestamp":"2026-02-13T12:30:00"}]}'
+            ></textarea>
+          </label>
+
+          <div class="muted small">
+            Tip: if ChatGPT wraps JSON in ```json fences, keep it as-is. The importer cleans that automatically.
           </div>
         </div>
 

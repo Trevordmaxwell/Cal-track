@@ -30,9 +30,10 @@ A cozy, privacy-first calorie + exercise tracker that runs as a **mobile web app
 - “Copy update” button for a friendly daily summary
 
 ### Data
-- Export JSON (backup; includes photo logs — can get large)
+- Export backup JSON (includes photo logs — can get large)
 - Export CSV (for spreadsheets)
-- Import JSON (restore)
+- Import backup JSON (restore)
+- ChatGPT bridge (single AI flow): copy prompt template + paste AI JSON entries back into the app
 - Wipe all data
 
 ---
@@ -105,7 +106,7 @@ Edit `<title>` in `index.html` and the top header text.
 ## Data + privacy notes
 - Data lives in **IndexedDB** on the device (including photo logs).
 - If you wipe Safari data or remove the Home Screen app, you may lose the logs.
-- Use **Export JSON** occasionally as a backup.
+- Use **Export backup JSON** occasionally as a backup.
 
 ---
 
@@ -113,6 +114,26 @@ Edit `<title>` in `index.html` and the top header text.
 - Favorites editor for quick actions (UI-based, not code-based)
 - Barcode scanning (needs a food database + camera flow)
 - Optional cloud sync (so both of you can share logs)
-- Smarter “AI parse” workflow for photo + notes (send export to an LLM, then import cleaned entries)
 
 Have fun — and keep it gentle.
+
+---
+
+## Mobile ChatGPT workflow (no backend)
+
+This is the fastest setup if you want AI help without running a server:
+
+1. In the app, open **Settings**.
+2. In **ChatGPT bridge (easy)**, tap **Copy prompt template**.
+3. Paste that prompt into ChatGPT on your phone, then paste your rough notes/photos context under it.
+4. Ask ChatGPT to return JSON only.
+5. Copy ChatGPT's JSON response.
+6. Back in the app, paste into **Paste ChatGPT JSON response** and tap **Import pasted AI JSON**.
+
+Accepted entry types:
+- `food`
+- `exercise`
+- `note`
+- `weight`
+
+Tip: If ChatGPT wraps the response in ```json code fences, the importer will clean that automatically.
