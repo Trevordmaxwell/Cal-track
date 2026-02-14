@@ -1386,6 +1386,101 @@ function toAiSourceNotePayload(note){
   };
 }
 
+function clipPreviewText(text, maxLen=84){
+  const s = String(text || "").trim();
+  if(s.length <= maxLen) return s;
+  return `${s.slice(0, maxLen - 3)}...`;
+}
+
+function aiPreviewTitle(entry){
+  if(entry.type === "food"){
+    return `Food: ${entry.name || "Food"}`;
+  }
+  if(entry.type === "exercise"){
+    return `Exercise: ${entry.name || "Exercise"}`;
+  }
+  if(entry.type === "weight"){
+    const unit = entry.unit || state.goals.weightUnit || "lb";
+    return `Weight: ${round1(safeNum(entry.value))} ${unit}`;
+  }
+  return `Note: ${clipPreviewText(entry.text || "", 66) || "Note"}`;
+}
+
+function aiPreviewMeta(entry){
+  const parts = [];
+  if(entry.day) parts.push(entry.day);
+  if(entry.ts) parts.push(prettyTime(entry.ts));
+
+  if(entry.type === "food"){
+    if(entry.calories !== undefined && entry.calories !== null) parts.push(`${Math.round(safeNum(entry.calories))} kcal`);
+    if(entry.protein_g !== undefined && entry.protein_g !== null) parts.push(`${round1(safeNum(entry.protein_g))}g protein`);
+    if(entry.meal) parts.push(String(entry.meal));
+  }else if(entry.type === "exercise"){
+    if(entry.duration_min !== undefined && entry.duration_min !== null) parts.push(`${Math.round(safeNum(entry.duration_min))} min`);
+    if(entry.intensity) parts.push(String(entry.intensity));
+    if(entry.calories_burned !== undefined && entry.calories_burned !== null){
+      parts.push(`${Math.round(safeNum(entry.calories_burned))} kcal burned`);
+    }
+  }else if(entry.type === "note"){
+    const text = clipPreviewText(entry.text || "", 72);
+    if(text) parts.push(text);
+  }
+
+  return parts.join(" | ");
+}
+
+function setAiWizardStatus(text){
+  const el = $("#aiWizardStatus");
+  if(el) el.textContent = text;
+}
+
+function renderAiPreview(entries = []){
+  const host = $("#aiPreviewList");
+  if(!host) return;
+
+  if(!entries.length){
+    host.innerHTML = `<div class="muted small">Preview entries will appear here.</div>`;
+    return;
+  }
+
+  host.innerHTML = entries.map((entry) => {
+    return `
+      <div class="item">
+        <div>
+          <div class="item__title">${htmlEscape(aiPreviewTitle(entry))}</div>
+          <div class="item__meta">${htmlEscape(aiPreviewMeta(entry))}</div>
+        </div>
+        <div class="item__actions"></div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function buildAiPromptFromNotes(){
+  const allNotes = await getPlainLanguageNotes();
+  const notesForPrompt = allNotes.slice(-AI_SOURCE_NOTES_LIMIT);
+  state.lastAiPromptSourceNoteIds = notesForPrompt.map((n) => n.id).filter(Boolean);
+  const sourcePayload = notesForPrompt.map(toAiSourceNotePayload);
+  return {
+    prompt: aiPromptTemplate(sourcePayload),
+    sourcePayload,
+    totalNotes: allNotes.length,
+    truncated: allNotes.length > sourcePayload.length,
+  };
+}
+
+async function resolveAiClearTargets({ fallbackToAll = true } = {}){
+  const allNotes = await getPlainLanguageNotes();
+  const copiedIds = new Set(state.lastAiPromptSourceNoteIds);
+  const copiedNotes = allNotes.filter((n) => copiedIds.has(n.id));
+  const targetNotes = copiedNotes.length ? copiedNotes : (fallbackToAll ? allNotes : []);
+  const scope = copiedNotes.length
+    ? `last copied notes (${targetNotes.length})`
+    : `all plain-language notes (${targetNotes.length})`;
+
+  return { allNotes, copiedNotes, targetNotes, scope };
+}
+
 async function refreshAiSourceSummary(){
   const summary = $("#aiSourceSummary");
   if(!summary) return;
@@ -1659,18 +1754,42 @@ function setupSettings(){
   $("#exportJsonBtn").addEventListener("click", exportJson);
   $("#exportCsvBtn").addEventListener("click", exportCsv);
 
+  $("#processAiInboxBtn")?.addEventListener("click", async () => {
+    try{
+      const { prompt, sourcePayload, truncated } = await buildAiPromptFromNotes();
+      const ok = await copyToClipboard(prompt);
+      await refreshAiSourceSummary();
+      renderAiPreview([]);
+
+      if(ok){
+        if(sourcePayload.length){
+          const countLabel = truncated
+            ? `latest ${sourcePayload.length}`
+            : `${sourcePayload.length}`;
+          setAiWizardStatus(`Step 1 done: prompt copied with ${countLabel} notes. Paste ChatGPT JSON, then tap Preview.`);
+          showToast(`Prompt copied with ${countLabel} notes.`);
+        }else{
+          setAiWizardStatus("Step 1 done: prompt copied, but no notes were found yet.");
+          showToast("Prompt copied (no notes found yet).");
+        }
+        const input = $("#aiJsonInput");
+        if(input) input.focus();
+      }else{
+        setAiWizardStatus("Could not copy prompt. You can still paste the prompt manually.");
+        showToast("Could not copy prompt.");
+      }
+    }catch(e){
+      alert(`Could not process note inbox.\n\n${e.message}`);
+    }
+  });
+
   $("#copyAiPromptBtn")?.addEventListener("click", async () => {
     try{
-      const allNotes = await getPlainLanguageNotes();
-      const notesForPrompt = allNotes.slice(-AI_SOURCE_NOTES_LIMIT);
-      state.lastAiPromptSourceNoteIds = notesForPrompt.map((n) => n.id).filter(Boolean);
-      const sourcePayload = notesForPrompt.map(toAiSourceNotePayload);
-      const prompt = aiPromptTemplate(sourcePayload);
+      const { prompt, sourcePayload, truncated } = await buildAiPromptFromNotes();
       const ok = await copyToClipboard(prompt);
       await refreshAiSourceSummary();
       if(ok){
         if(sourcePayload.length){
-          const truncated = allNotes.length > sourcePayload.length;
           showToast(truncated
             ? `Prompt copied with latest ${sourcePayload.length} notes.`
             : `Prompt copied with ${sourcePayload.length} notes.`);
@@ -1686,22 +1805,16 @@ function setupSettings(){
   });
 
   $("#clearAiSourceNotesBtn")?.addEventListener("click", async () => {
-    const allNotes = await getPlainLanguageNotes();
+    const { allNotes, targetNotes, scope } = await resolveAiClearTargets({ fallbackToAll: true });
     if(!allNotes.length){
       state.lastAiPromptSourceNoteIds = [];
       await refreshAiSourceSummary();
       showToast("No note entries to clear.");
+      setAiWizardStatus("No note entries in inbox.");
       return;
     }
 
-    const copiedIds = new Set(state.lastAiPromptSourceNoteIds);
-    const copiedNotes = allNotes.filter((n) => copiedIds.has(n.id));
-    const targetNotes = copiedNotes.length ? copiedNotes : allNotes;
-    const promptScope = copiedNotes.length
-      ? `last copied notes (${targetNotes.length})`
-      : `all plain-language notes (${targetNotes.length})`;
-
-    const ok = confirm(`Clear ${promptScope}? This only removes note entries, not food/exercise logs.`);
+    const ok = confirm(`Clear ${scope}? This only removes note entries, not food/exercise logs.`);
     if(!ok) return;
 
     for(const note of targetNotes){
@@ -1711,15 +1824,18 @@ function setupSettings(){
     state.lastAiPromptSourceNoteIds = [];
     const noteInput = $("#noteText");
     if(noteInput) noteInput.value = "";
+    renderAiPreview([]);
     await refreshAll();
     showToast(`Cleared ${targetNotes.length} notes.`);
+    setAiWizardStatus(`Cleared ${targetNotes.length} note entries from inbox.`);
   });
 
-  $("#importAiJsonBtn")?.addEventListener("click", async () => {
+  $("#previewAiJsonBtn")?.addEventListener("click", async () => {
     const input = $("#aiJsonInput");
     const raw = input?.value?.trim() || "";
     if(!raw){
       showToast("Paste AI JSON first.");
+      setAiWizardStatus("Step 2: paste ChatGPT JSON, then tap Preview.");
       return;
     }
 
@@ -1731,16 +1847,59 @@ function setupSettings(){
       return;
     }
 
-    const ok = confirm(`Import ${entries.length} AI-generated entr${entries.length === 1 ? "y" : "ies"}?`);
+    renderAiPreview(entries);
+    setAiWizardStatus(`Step 2 done: previewing ${entries.length} entr${entries.length === 1 ? "y" : "ies"}.`);
+    showToast(`Preview ready (${entries.length}).`);
+  });
+
+  $("#importAiJsonBtn")?.addEventListener("click", async () => {
+    const input = $("#aiJsonInput");
+    const raw = input?.value?.trim() || "";
+    if(!raw){
+      showToast("Paste AI JSON first.");
+      setAiWizardStatus("Step 2: paste ChatGPT JSON, preview it, then import.");
+      return;
+    }
+
+    let entries = [];
+    try{
+      entries = parseAiImport(raw);
+    }catch(e){
+      alert(`Could not parse AI JSON.\n\n${e.message}`);
+      return;
+    }
+
+    renderAiPreview(entries);
+
+    const { targetNotes } = await resolveAiClearTargets({ fallbackToAll: false });
+    const clearCount = targetNotes.length;
+    const clearLabel = clearCount
+      ? ` and clear ${clearCount} copied note entr${clearCount === 1 ? "y" : "ies"}`
+      : "";
+    const ok = confirm(`Import ${entries.length} AI-generated entr${entries.length === 1 ? "y" : "ies"}${clearLabel}?`);
     if(!ok) return;
 
     for(const e of entries){
       await addEntry(e);
     }
 
+    for(const note of targetNotes){
+      await deleteEntry(note.id);
+    }
+
+    const importedCount = entries.length;
+    const clearedCount = targetNotes.length;
     input.value = "";
+    state.lastAiPromptSourceNoteIds = [];
+    renderAiPreview([]);
     await refreshAll();
-    showToast(`Imported ${entries.length} entr${entries.length === 1 ? "y" : "ies"}.`);
+    if(clearedCount){
+      showToast(`Imported ${importedCount} and cleared ${clearedCount} notes.`);
+      setAiWizardStatus(`Step 3 done: imported ${importedCount} entries and cleared ${clearedCount} copied notes.`);
+    }else{
+      showToast(`Imported ${importedCount} entr${importedCount === 1 ? "y" : "ies"}.`);
+      setAiWizardStatus(`Step 3 done: imported ${importedCount} entries. No copied notes were cleared.`);
+    }
   });
 
   $("#importJsonInput").addEventListener("change", async (evt) => {
@@ -1765,6 +1924,8 @@ function setupSettings(){
   refreshAiSourceSummary().catch(() => {
     // keep settings usable even if summary lookup fails
   });
+  renderAiPreview([]);
+  setAiWizardStatus("Wizard: Step 1 copy prompt, Step 2 paste + preview JSON, Step 3 import.");
 }
 
 function setupInsights(){
