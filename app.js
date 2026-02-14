@@ -1093,9 +1093,19 @@ async function exportCsv(){
 
 async function importJson(file){
   const text = await file.text();
-  const data = JSON.parse(text);
+  let data;
+  try{
+    data = JSON.parse(text);
+  }catch(_err){
+    alert("Couldn’t read that JSON file. Please check the format and try again.");
+    return;
+  }
 
-  if(!data || !Array.isArray(data.entries)){
+  const rawEntries = Array.isArray(data?.entries)
+    ? data.entries
+    : (Array.isArray(data) ? data : null);
+
+  if(!rawEntries){
     alert("That file doesn’t look like a Pocket Balance export.");
     return;
   }
@@ -1110,15 +1120,45 @@ async function importJson(file){
   }
 
   // restore entries
-  for(const e of data.entries){
-    // basic shape check
-    if(!e || !e.id || !e.ts) continue;
-    await addEntry(e);
+  let importedCount = 0;
+  for(const e of rawEntries){
+    if(!e || typeof e !== "object") continue;
+
+    const tsRaw = e.ts ?? e.timestamp;
+    const parsedTs = typeof tsRaw === "number"
+      ? tsRaw
+      : (typeof tsRaw === "string" ? (Number(tsRaw) || Date.parse(tsRaw)) : NaN);
+    const ts = Number.isFinite(parsedTs) && parsedTs > 0 ? parsedTs : Date.now();
+
+    let type = typeof e.type === "string" ? e.type.toLowerCase().trim() : "";
+    if(!type){
+      if(e.text || e.note) type = "note";
+      else if(e.value && (e.unit || e.weightUnit)) type = "weight";
+      else if(e.duration_min || e.calories_burned) type = "exercise";
+      else type = "food";
+    }
+
+    if(!["food","exercise","note","weight","photo"].includes(type)){
+      if(e.text || e.note) type = "note";
+      else continue;
+    }
+
+    const normalized = {
+      ...e,
+      id: e.id || uid(),
+      type,
+      ts,
+      day: e.day || dayStringFromTs(ts),
+      text: type === "note" ? String(e.text ?? e.note ?? "") : e.text,
+    };
+
+    await addEntry(normalized);
+    importedCount += 1;
   }
 
   await loadGoals();
   await refreshAll();
-  showToast("Imported.");
+  showToast(`Imported ${importedCount} entries.`);
 }
 
 /** -----------------------------
