@@ -60,6 +60,26 @@
         <div class="card">
           <div class="card__header">
             <div>
+              <div class="kicker">Contact pair timer</div>
+              <div class="muted">Manual only. No auto-renew.</div>
+            </div>
+            <button class="btn btn--primary" id="startContactsPairBtn" type="button">Start new pair</button>
+          </div>
+
+          <div class="row row--wrap">
+            <div class="pill pill--soft" id="contactsTimerPill">No active pair</div>
+            <div class="muted small" id="contactsTimerMeta">Pair length: 14 days.</div>
+          </div>
+
+          <form class="row row--tight mini-form" id="contactsDurationForm">
+            <input class="input" id="contactsDurationDaysInput" inputmode="numeric" placeholder="Pair length (days)" />
+            <button class="btn btn--ghost" type="submit">Save length</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card__header">
+            <div>
               <div class="kicker">Recent activity</div>
               <div class="muted">Tap an item to expand. Swipe is not required.</div>
             </div>

@@ -62,6 +62,11 @@ const DEFAULT_PILL_CATALOG = [
   "Evening pill"
 ];
 
+const DEFAULT_CONTACTS_TRACKER = {
+  pairDurationDays: 14,
+  activePairStartTs: null,
+};
+
 const PRAISE = {
   food: [
     "Logged. Small check-ins add up.",
@@ -105,6 +110,7 @@ const state = {
   pillCatalog: [...DEFAULT_PILL_CATALOG],
   pillTakenByDay: {},
   todoItems: [],
+  contactsTracker: { ...DEFAULT_CONTACTS_TRACKER },
 };
 
 /** -----------------------------
@@ -141,6 +147,50 @@ function showToast(msg){
 
 function todayDay(){
   return dayStringFromTs(Date.now());
+}
+
+function normalizeContactsTracker(raw){
+  const duration = Math.round(safeNum(raw?.pairDurationDays));
+  const pairDurationDays = duration >= 1 && duration <= 365
+    ? duration
+    : DEFAULT_CONTACTS_TRACKER.pairDurationDays;
+
+  const startTs = Number(raw?.activePairStartTs);
+  const activePairStartTs = Number.isFinite(startTs) && startTs > 0
+    ? Math.round(startTs)
+    : null;
+
+  return { pairDurationDays, activePairStartTs };
+}
+
+function contactsTimerSnapshot(){
+  const dayMs = 24 * 60 * 60 * 1000;
+  const duration = state.contactsTracker.pairDurationDays;
+  const startTs = state.contactsTracker.activePairStartTs;
+
+  if(!startTs){
+    return {
+      status: "No active pair",
+      meta: `Pair length: ${duration} days. Tap Start new pair when you open one.`,
+    };
+  }
+
+  const elapsedDays = Math.max(0, Math.floor((Date.now() - startTs) / dayMs));
+  const daysLeft = duration - elapsedDays;
+  const startedLabel = prettyDate(dayStringFromTs(startTs));
+  const replaceLabel = prettyDate(dayStringFromTs(startTs + (duration * dayMs)));
+
+  let status = "";
+  if(daysLeft > 1) status = `${daysLeft} days left`;
+  else if(daysLeft === 1) status = "1 day left";
+  else if(daysLeft === 0) status = "Last day";
+  else if(daysLeft === -1) status = "1 day overdue";
+  else status = `${Math.abs(daysLeft)} days overdue`;
+
+  return {
+    status,
+    meta: `Length ${duration}d • Started ${startedLabel} • Replace ${replaceLabel}`,
+  };
 }
 
 function lastNDays(n){
@@ -363,6 +413,19 @@ async function renderToday(){
 }
 
 function renderTrackers(day){
+  const contactsPill = $("#contactsTimerPill");
+  const contactsMeta = $("#contactsTimerMeta");
+  const durationInput = $("#contactsDurationDaysInput");
+
+  if(contactsPill && contactsMeta){
+    const snapshot = contactsTimerSnapshot();
+    contactsPill.textContent = snapshot.status;
+    contactsMeta.textContent = snapshot.meta;
+    if(durationInput && document.activeElement !== durationInput){
+      durationInput.value = String(state.contactsTracker.pairDurationDays);
+    }
+  }
+
   const pillHost = $("#pillChecklist");
   const todoHost = $("#todoChecklist");
   if(!pillHost || !todoHost) return;
@@ -968,6 +1031,9 @@ async function loadTrackers(){
 
   const savedTodos = await getSetting("todoItems");
   state.todoItems = Array.isArray(savedTodos) ? savedTodos : [];
+
+  const savedContactsTracker = await getSetting("contactsTracker");
+  state.contactsTracker = normalizeContactsTracker(savedContactsTracker);
 }
 
 function setupTrackers(){
@@ -1000,6 +1066,39 @@ function setupTrackers(){
     state.todoItems.unshift({ id: uid(), text, done: false });
     await putSetting("todoItems", state.todoItems);
     input.value = "";
+    renderTrackers(todayDay());
+  });
+
+  $("#contactsDurationForm")?.addEventListener("submit", async (evt) => {
+    evt.preventDefault();
+    const input = $("#contactsDurationDaysInput");
+    const days = Math.round(safeNum(input.value));
+    if(!days || days < 1 || days > 365){
+      showToast("Enter a pair length between 1 and 365 days.");
+      return;
+    }
+    state.contactsTracker = normalizeContactsTracker({
+      ...state.contactsTracker,
+      pairDurationDays: days,
+    });
+    await putSetting("contactsTracker", state.contactsTracker);
+    showToast("Saved contact pair length.");
+    renderTrackers(todayDay());
+  });
+
+  $("#startContactsPairBtn")?.addEventListener("click", async () => {
+    const hasActivePair = !!state.contactsTracker.activePairStartTs;
+    if(hasActivePair){
+      const ok = confirm("Start a brand-new pair now? This resets the current timer.");
+      if(!ok) return;
+    }
+
+    state.contactsTracker = normalizeContactsTracker({
+      ...state.contactsTracker,
+      activePairStartTs: Date.now(),
+    });
+    await putSetting("contactsTracker", state.contactsTracker);
+    showToast("Started a new contact pair.");
     renderTrackers(todayDay());
   });
 }

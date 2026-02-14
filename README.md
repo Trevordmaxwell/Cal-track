@@ -24,6 +24,7 @@ A cozy, privacy-first calorie + exercise tracker that runs as a **mobile web app
 - Water, protein, fiber
 - Last log time / (optional) most recent weight
 - A gentle “nudge” message (hydration / fiber / movement)
+- Contact pair timer (manual Start new pair; no auto-renew)
 
 ### Insights
 - 7-day totals + mini trendlines (sparklines)
