@@ -304,9 +304,9 @@
           </div>
 
           <div class="row row--wrap">
+            <button class="btn btn--primary" id="processAiInboxBtn" type="button">Process note inbox</button>
             <button class="btn" id="copyAiPromptBtn" type="button">Copy prompt with local notes</button>
             <button class="btn btn--ghost" id="clearAiSourceNotesBtn" type="button">Clear note inbox</button>
-            <button class="btn btn--primary" id="importAiJsonBtn" type="button">Import pasted AI JSON</button>
           </div>
 
           <div class="muted small" id="aiSourceSummary">No plain-language notes saved yet.</div>
@@ -320,6 +320,16 @@
               placeholder='{"entries":[{"type":"food","name":"Turkey sandwich","calories":420,"protein_g":27,"carbs_g":39,"fat_g":17,"fiber_g":4,"meal":"lunch","note":"Estimated from note","timestamp":"2026-02-13T12:30:00"}]}'
             ></textarea>
           </label>
+
+          <div class="row row--wrap">
+            <button class="btn" id="previewAiJsonBtn" type="button">Preview AI JSON</button>
+            <button class="btn btn--primary" id="importAiJsonBtn" type="button">Import + clear copied notes</button>
+          </div>
+
+          <div class="muted small" id="aiWizardStatus">Wizard: Step 1 copy prompt, Step 2 paste + preview JSON, Step 3 import.</div>
+          <div class="list" id="aiPreviewList">
+            <div class="muted small">Preview entries will appear here.</div>
+          </div>
 
           <div class="muted small">
             Tip: if ChatGPT wraps JSON in ```json fences, keep it as-is. The importer cleans that automatically.

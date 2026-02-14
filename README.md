@@ -125,13 +125,13 @@ Have fun — and keep it gentle.
 This is the fastest setup if you want AI help without running a server:
 
 1. In the app, open **Settings**.
-2. In **ChatGPT bridge (easy)**, tap **Copy prompt with local notes**.
-3. The app auto-includes saved plain-language notes in structured JSON inside the copied prompt.
-4. Paste the prompt into ChatGPT on your phone and send it.
-5. Ask ChatGPT to return JSON only.
-6. Copy ChatGPT's JSON response.
-7. Back in the app, paste into **Paste ChatGPT JSON response** and tap **Import pasted AI JSON**.
-8. Tap **Clear note inbox** to remove notes you already parsed (keeps this workflow clean).
+2. In **ChatGPT bridge (easy)**, tap **Process note inbox**.
+3. The app copies a prompt that already includes your saved plain-language notes as JSON.
+4. Paste that prompt into ChatGPT on your phone and send it.
+5. Ask ChatGPT to return JSON only, then copy the response.
+6. Back in the app, paste it into **Paste ChatGPT JSON response**.
+7. Tap **Preview AI JSON** to sanity-check what will import.
+8. Tap **Import + clear copied notes** to finish in one step.
 
 Accepted entry types:
 - `food`
